@@ -5,14 +5,15 @@ from typing import Any
 
 def main():
     # file_path = input('파일 이름을 입력하세요: ')
-    file_path = 'mission_computer_main.log'
-    json_file = 'mission_computer_main.json'
-    report_file_path = 'log_analysis.md'
+    file_path = './mission_computer_main.log'
+    json_file = './mission_computer_main.json'
+    report_file_path = './log_analysis.md'
 
     try:
         preprocessed = read_log_file(file_path)
         sorted_log = sort_by_timestamp_desc(preprocessed)
-        log_dict = convert_list_to_dict(sorted_log)
+        # log_dict = convert_list_to_dict(sorted_log)
+        log_dict = convert_list_dict_without_nested(sorted_log)
         save_dict_to_json(json_file, log_dict)
         publish_analysis_report(sorted_log, report_file_path)
         # print_log_desc(file_path)
@@ -49,16 +50,16 @@ def preprocess_data(f) -> list[Any]:
 
 def sort_by_timestamp_desc(preprocessed: list) -> list[Any]:
     """로그를 시간 역순으로 정렬"""
-    log_dict = sorted(
+    log_list = sorted(
         preprocessed,
         key=lambda x: datetime.strptime(x[0], '%Y-%m-%d %H:%M:%S'),
         reverse=True,
     )
     print('######### 시간 역순 출력 #########')
-    print(*log_dict, sep='\n', end='\n\n')
+    print(*log_list, sep='\n', end='\n\n')
     # print()
 
-    return log_dict
+    return log_list
 
 
 def convert_list_to_dict(data: list) -> dict:
@@ -68,8 +69,19 @@ def convert_list_to_dict(data: list) -> dict:
         for i, (timestamp, level, msg) in enumerate(data)
     }
 
-    # print('######### dict 출력 #########')
-    # print(*analyzed_dict.values(), sep='\n', end='\n\n')
+    print('######### dict 출력 #########')
+    print(*analyzed_dict.values(), sep='\n', end='\n\n')
+
+    return analyzed_dict
+
+
+def convert_list_dict_without_nested(data: list) -> dict:
+    analyzed_dict = {timestamp: msg for timestamp, _, msg in data}
+
+    print('######### dict 출력 #########')
+    # print(analyzed_dict, sep='\n', end='\n\n')
+    for key, value in analyzed_dict.items():
+        print(key, value)
 
     return analyzed_dict
 
@@ -98,7 +110,12 @@ def publish_analysis_report(sorted_logs: list, file_path: str):
     key_events = []
     for log in sorted_logs:
         timestamp, _, message = log
-        if 'explosion' in message or 'unstable' in message or 'landed' in message:
+        if (
+            'explosion' in message
+            or 'unstable' in message
+            or 'landed' in message
+            or 'completed' in message
+        ):
             key_events.append(f'- **{timestamp}**: {message}')
 
     key_events.reverse()
