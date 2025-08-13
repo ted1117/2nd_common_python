@@ -401,4 +401,7 @@ pyrightconfig.json
 .history
 .ionide
 
+### ###
+mars_base
+
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,macos,flask,django
