@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-def load_data(files: tuple):
+def load_data(files: tuple) -> NDArray | None:
     try:
         array_list = [
             np.genfromtxt(
