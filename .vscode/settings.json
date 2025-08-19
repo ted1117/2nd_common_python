@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        }
+    ],
+    "[python]": {
+        "editor.rulers": [
+            88
+        ],
+        // 1. 기본 포매터를 Ruff로 지정합니다.
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        // 2. 저장 시 포매팅을 활성화합니다. (Ruff 포매터가 동작)
+        "editor.formatOnSave": true,
+        // 3. (마법의 설정) 저장 시 가능한 모든 문제를 자동으로 수정합니다. (Ruff 린터의 --fix 기능)
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit"
+        }
+    }
+}
