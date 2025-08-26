@@ -1,4 +1,6 @@
 import multiprocessing as mp
+import time
+from datetime import datetime
 from io import BytesIO
 
 import pyzipper
@@ -22,17 +24,19 @@ def search_smallest_file(zf):
     return min(zf.infolist(), key=lambda x: x.file_size).filename
 
 
-def is_unzipped(zf, smallest_file, pwd) -> bool:
+def is_unzipped(zf, file, pwd) -> bool:
     try:
-        zf.read(smallest_file, pwd=pwd.encode('utf-8'))
+        zf.read(file, pwd=pwd.encode('utf-8'))
         return True
     except Exception:
         return False
 
 
-def unzip_file(args):
+def unlock_zip(args):
     file_content, start, end = args
     zf = None
+    start_time = time.time()
+
     try:
         zf = pyzipper.AESZipFile(BytesIO(file_content))
         smallest = search_smallest_file(zf)
@@ -40,10 +44,16 @@ def unzip_file(args):
             pwd = create_password(i)
 
             if i % 100000 == 0:
-                print(f'PID {mp.current_process().pid}: {pwd}')
+                elapsed_time = time.time() - start_time
+                print(
+                    f'PID {mp.current_process().pid}: 시도 횟수 {i}, 현재 암호 {pwd}, 경과 시간 {elapsed_time:.2f}초'
+                )
 
             if is_unzipped(zf, smallest, pwd):
-                print(f'Found by PID {mp.current_process().pid}: {pwd}')
+                elapsed_time = time.time() - start_time
+                print(
+                    f'PID {mp.current_process().pid}에서 암호 발견: {pwd} (시도 횟수: {i}, 경과 시간: {elapsed_time:.2f}초)'
+                )
                 return pwd
     except KeyboardInterrupt:
         return None
@@ -66,7 +76,7 @@ def calculate_ranges(file_content, workers=6) -> list[tuple]:
     return ranges
 
 
-def save_password_to_file(pwd: str, filename: str = 'result.txt'):
+def save_password_to_file(pwd: str, filename: str = 'password.txt'):
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(pwd)
@@ -87,15 +97,28 @@ def main():
     found = None
     pool = None
 
+    # 시작 시간 기록
+    start_time = time.time()
+    start_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f'암호 해독 시작: {start_datetime}')
+    print(f'총 {TOTAL_CASE:,}개의 조합을 {workers}개 프로세스로 시도합니다.')
+    print('-' * 50)
+
     try:
         with mp.Pool(processes=workers) as pool:
-            for res in pool.imap_unordered(unzip_file, ranges):
+            for res in pool.imap_unordered(unlock_zip, ranges):
                 if res is not None:
                     found = res
                     pool.terminate()
                     break
 
-        print('암호:', found)
+        total_elapsed = time.time() - start_time
+        end_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('-' * 50)
+        print(f'암호 해독 종료: {end_datetime}')
+        print(f'총 소요 시간: {total_elapsed:.2f}초')
+        print(f'발견된 암호: {found}')
 
         if found:
             save_password_to_file(found)
@@ -103,7 +126,12 @@ def main():
             print('암호를 찾지 못했습니다.')
 
     except KeyboardInterrupt:
-        print('\nKeyboard Interrupt Detected')
+        total_elapsed = time.time() - start_time
+        end_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print('\n' + '-' * 50)
+        print('Keyboard Interrupt Detected')
+        print(f'중단 시간: {end_datetime}')
+        print(f'진행 시간: {total_elapsed:.2f}초')
         if pool is not None:
             try:
                 pool.terminate()
