@@ -40,19 +40,22 @@ def unlock_zip(args):
     try:
         zf = pyzipper.AESZipFile(BytesIO(file_content))
         smallest = search_smallest_file(zf)
+        cnt = 0
         for i in range(start, end + 1):
             pwd = create_password(i)
+
+            cnt += 1
 
             if i % 100000 == 0:
                 elapsed_time = time.time() - start_time
                 print(
-                    f'PID {mp.current_process().pid}: 시도 횟수 {i}, 현재 암호 {pwd}, 경과 시간 {elapsed_time:.2f}초'
+                    f'PID {mp.current_process().pid}: 시도 횟수 {cnt}, 현재 암호 {pwd}, 경과 시간 {elapsed_time:.2f}초'
                 )
 
             if is_unzipped(zf, smallest, pwd):
                 elapsed_time = time.time() - start_time
                 print(
-                    f'PID {mp.current_process().pid}에서 암호 발견: {pwd} (시도 횟수: {i}, 경과 시간: {elapsed_time:.2f}초)'
+                    f'PID {mp.current_process().pid}에서 암호 발견: {pwd} (시도 횟수: {cnt}, 경과 시간: {elapsed_time:.2f}초)'
                 )
                 return pwd
     except KeyboardInterrupt:
