@@ -1,91 +1,116 @@
-# door_hacking.py
+import multiprocessing as mp
+from io import BytesIO
 
-import itertools
-import sys
-import time
-import zipfile
-import zlib  # 1. zlib 라이브러리를 임포트합니다.
-from pathlib import Path
+import pyzipper
+
+PWD_LEN = 6
+ALPHANUM = 'abcdefghijklmnopqrstuvwxyz0123456789'
+NUMALPHA = '0123456789abcdefghijklmnopqrstuvwxyz'
+BASE = len(NUMALPHA)
+TOTAL_CASE = BASE**PWD_LEN  # 36^6
 
 
-def unlock_zip(zip_filename='emergency_storage_key.zip', result_filename='result.txt'):
-    """
-    숫자와 소문자 알파벳으로 구성된 6자리 암호를 브루트포스 방식으로 찾아
-    zip 파일의 압축을 해제하고 암호를 파일에 저장합니다.
-    """
-    chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-    password_length = 6
+def create_password(index: int) -> str:
+    tmp = ['a'] * PWD_LEN
+    for i in range(PWD_LEN - 1, -1, -1):
+        index, r = divmod(index, BASE)
+        tmp[i] = ALPHANUM[r]
+    return ''.join(tmp)
 
-    print('=' * 50)
-    print(f"'{zip_filename}' 파일의 암호 해독을 시작합니다.")
-    print(f'암호 조합: 숫자(0-9), 소문자 알파벳(a-z), 길이 {password_length}자리')
-    print('=' * 50)
 
-    start_time = time.time()
-    attempts = 0
+def search_smallest_file(zf):
+    return min(zf.infolist(), key=lambda x: x.file_size).filename
 
+
+def is_unzipped(zf, smallest_file, pwd) -> bool:
     try:
-        zip_file = zipfile.ZipFile(zip_filename, 'r')
-    except FileNotFoundError:
-        print(f"오류: '{zip_filename}' 파일을 찾을 수 없습니다.")
-        print('스크립트와 같은 폴더에 파일이 있는지 확인해주세요.')
-        return
-    except zipfile.BadZipFile:
-        print(f"오류: '{zip_filename}' 파일이 유효한 ZIP 파일이 아닙니다.")
-        return
+        zf.read(smallest_file, pwd=pwd.encode('utf-8'))
+        return True
+    except Exception:
+        return False
 
+
+def unzip_file(args):
+    file_content, start, end = args
+    zf = None
     try:
-        for p in itertools.product(chars, repeat=password_length):
-            attempts += 1
-            password = ''.join(p)
+        zf = pyzipper.AESZipFile(BytesIO(file_content))
+        smallest = search_smallest_file(zf)
+        for i in range(start, end + 1):
+            pwd = create_password(i)
 
-            elapsed_time = time.time() - start_time
-            print(
-                f' > 시도 횟수: {attempts:,} | 진행 시간: {elapsed_time:.2f}초 | 현재 암호: {password}',
-                end='\r',
-            )
-            sys.stdout.flush()
+            if i % 100000 == 0:
+                print(f'PID {mp.current_process().pid}: {pwd}')
 
-            try:
-                zip_file.extractall(pwd=password.encode('utf-8'))
-
-                end_time = time.time()
-                total_elapsed_time = end_time - start_time
-
-                print(' ' * 80, end='\r')
-
-                print('\n' + '=' * 50)
-                print('성공! 암호를 찾았습니다.')
-                print(f' > 최종 암호: {password}')
-                print(f' > 총 시도 횟수: {attempts:,}회')
-                print(f' > 총 걸린 시간: {total_elapsed_time:.2f}초')
-                print('=' * 50)
-
-                try:
-                    with open(result_filename, 'w') as f:
-                        f.write(password)
-                    print(f"'{result_filename}' 파일에 암호를 성공적으로 저장했습니다.")
-                except IOError as e:
-                    print(f"오류: '{result_filename}' 파일 저장에 실패했습니다. ({e})")
-
-                break
-
-            # 2. 여기에 zlib.error를 추가하여 암호가 틀렸을 때의 오류를 처리합니다.
-            except (RuntimeError, zipfile.BadZipFile, zlib.error):
-                continue
-
-        else:
-            print('\n' + '=' * 50)
-            print('실패. 가능한 모든 조합을 시도했지만 암호를 찾지 못했습니다.')
-            print('암호의 구성 조건(길이, 문자셋)을 다시 확인해주세요.')
-            print('=' * 50)
-
+            if is_unzipped(zf, smallest, pwd):
+                print(f'Found by PID {mp.current_process().pid}: {pwd}')
+                return pwd
+    except KeyboardInterrupt:
+        return None
     finally:
-        print('\n작업을 종료하며 리소스를 정리합니다.')
-        zip_file.close()
+        if zf is not None:
+            try:
+                zf.close()
+            except:
+                pass
+    return None
+
+
+def calculate_ranges(file_content, workers=6) -> list[tuple]:
+    term = TOTAL_CASE // workers
+    ranges = []
+    for i in range(workers):
+        start = term * i
+        end = TOTAL_CASE - 1 if i == workers - 1 else term * (i + 1) - 1
+        ranges.append((file_content, start, end))
+    return ranges
+
+
+def save_password_to_file(pwd: str, filename: str = 'result.txt'):
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(pwd)
+        print(f'{filename}에 암호가 저장되었습니다.')
+    except Exception as e:
+        print(f'암호를 파일로 저장하는데 오류가 발생했습니다: {e}')
+
+
+def main():
+    file_path = 'Course5/Step1/emergency_storage_key.zip'
+    workers = 6
+
+    with open(file_path, 'rb') as f:
+        file_content = f.read()
+
+    ranges = calculate_ranges(file_content, workers)
+
+    found = None
+    pool = None
+
+    try:
+        with mp.Pool(processes=workers) as pool:
+            for res in pool.imap_unordered(unzip_file, ranges):
+                if res is not None:
+                    found = res
+                    pool.terminate()
+                    break
+
+        print('암호:', found)
+
+        if found:
+            save_password_to_file(found)
+        else:
+            print('암호를 찾지 못했습니다.')
+
+    except KeyboardInterrupt:
+        print('\nKeyboard Interrupt Detected')
+        if pool is not None:
+            try:
+                pool.terminate()
+                pool.join()
+            except:
+                pass
 
 
 if __name__ == '__main__':
-    BASE_DIR = Path(__file__).resolve().parent
-    file_path = str(BASE_DIR / 'emergency_storage_key.zip')
-    unlock_zip(zip_filename=file_path)
+    main()
