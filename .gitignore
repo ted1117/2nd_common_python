@@ -406,4 +406,7 @@ mars_base
 *.csv
 *.zip
 
+password.txt
+result.txt
+
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,macos,flask,django
