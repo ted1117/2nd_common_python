@@ -9,11 +9,13 @@ class Calculator(QWidget):
         super().__init__()
         self._init_ui()
 
-        self.waiting_operand = []
+        self.waiting_operand: list = []
         self.waiting_operator = None
 
-        self.operands = []
-        self.operators = []
+        self.operands: list = []
+        self.operators: list = []
+
+        self.current_expression: str = ''
 
         self.reset()
 
@@ -61,7 +63,7 @@ class Calculator(QWidget):
             case 'AC':
                 self.reset()
             case '%':
-                ...
+                self.waiting_operator = '%'
             case '=':
                 self._handle_equal_input()
             case '.':
@@ -82,7 +84,7 @@ class Calculator(QWidget):
         # 앞에 연산자 혹은 아무런 숫자 입력이 없다면 '0.' 추가
         # 숫자가 있으면 그냥 . 추가
         current_text = self.display.text()
-        if current_text[-1] == '.':
+        if '.' in current_text:
             return
         if self.waiting_operand:
             self.display.setText(current_text + '.')
@@ -110,19 +112,12 @@ class Calculator(QWidget):
     def _negative_positive(self): ...
 
     def _percent(self):
-        # 1. 아무런 입력이 없었을 땐, 그냥 퍼센티지 계산값만 보여주면 됨
-        if not self.waiting_operator:
-            operand = float(''.join(self.waiting_operand))
-            result = operand / 100
-            self.display.setText(str(result))
-            return result
-        # 2. 앞에 연산식이 있으면 해당 결과값에 퍼센티지 계산
-        else:
-            operand = float(''.join(self.waiting_operand))
-            ...
+        self.waiting_operator = '%'
+        # 1. 모듈러 연산
 
-        # ex) 200 + 30% + 100 + 30% = 468
-        # 3. 모듈러 연산
+        # 2. 퍼센티지 연산
+
+        ...
 
     def reset(self, update_display: bool = True):
         self.operators.clear()
@@ -139,16 +134,19 @@ class Calculator(QWidget):
             i = 0
             while i < len(self.operators):
                 op = self.operators[i]
-                if op in ('×', '÷'):
+                if op in ('×', '÷', '%'):
                     a, b = self.operands[i], self.operands[i + 1]
 
-                    if op == '×':
-                        result = Calculator._multiply(a, b)
-                    else:
-                        result = Calculator._divide(a, b)
+                    match op:
+                        case '×':
+                            result = Calculator._multiply(a, b)
+                        case '÷':
+                            result = Calculator._divide(a, b)
+                        case '%':
+                            result = Calculator._modulo(a, b)
 
-                        if result is None:
-                            raise ZeroDivisionError
+                    if result is None:
+                        raise ZeroDivisionError
 
                     self.operands[i] = result
 
@@ -161,10 +159,15 @@ class Calculator(QWidget):
             while self.operators:
                 op = self.operators.pop(0)
                 a = self.operands.pop(0)
-                b = self.operands.pop(0)
-                result = (
-                    Calculator._add(a, b) if op == '+' else Calculator._subtract(a, b)
-                )
+                if not self.operands:
+                    result = a
+                else:
+                    b = self.operands.pop(0)
+                    result = (
+                        Calculator._add(a, b)
+                        if op == '+'
+                        else Calculator._subtract(a, b)
+                    )
                 self.operands.insert(0, result)
 
             final_result = self.operands[0]
@@ -205,6 +208,12 @@ class Calculator(QWidget):
         if b == 0:
             raise ZeroDivisionError
         return a / b
+
+    @staticmethod
+    def _modulo(a: float, b: float) -> float | None:
+        if b == 0:
+            raise ZeroDivisionError
+        return a % b
 
     @staticmethod
     def _format_number(number: float) -> str:
