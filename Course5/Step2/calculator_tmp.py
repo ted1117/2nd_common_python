@@ -142,12 +142,6 @@ class CalculatorUI(QWidget):
             self.reset(update_display=False)
 
     def _percent(self):
-        """
-        self.waiting_operand 또는 self.operands의 마지막(문자열) 항을 보고
-        - 'a%b' → a % b (모듈러)로 치환
-        - 'n%'  + 마지막 연산자 (+/−) → base ± base*(n/100) 로 식을 축약
-        - (초항의 'n%') → n/100 으로 해석해 숫자 항으로 치환
-        """
         # 우선 현재 입력 버퍼 기준으로 토큰 확보
         token = ''.join(self.waiting_operand) if self.waiting_operand else None
 
@@ -247,77 +241,15 @@ class CalculatorUI(QWidget):
     def _negative_positive(self):
         current_text = self.display.text()
 
-        # 오류 상태면 무시
-        if current_text in ['정의되지 않음', 'Error!']:
-            return
-
-        # 마지막 연산자 인덱스 탐색 유틸 (로컬 함수)
-        def _last_op_index(s: str) -> int:
-            # 여러 연산자 중 가장 뒤에 있는 위치
-            idxs = [s.rfind(op) for op in ['+', '−', '×', '÷']]
-            return max(idxs)
-
-        # 화면에 보여줄 표기 생성 (음수면 괄호)
-        def _display_number(val: float) -> str:
-            s = self.calculator._format_number(val)
-            return f'({s})' if val < 0 else s
-
-        # 내부 버퍼용 표기(괄호 없음, 불필요한 0 제거, 부호는 -만)
-        def _canon_number(val: float) -> str:
-            return self.calculator._format_number(val)  # 음수면 '-'가 포함된 문자열
-
-        # 1) 현재 숫자 입력 중: waiting_operand 를 기반으로 토글
         if self.waiting_operand:
-            number_str = ''.join(self.waiting_operand)
-            try:
-                cur = float(number_str)
-            except ValueError:
-                return
+            if self.waiting_operand[0] == '-':
+                self.waiting_operand.pop(0)
+                new_text = current_text[1:]
+            else:
+                self.waiting_operand.insert(0, '-')
+                new_text = '-' + current_text
 
-            if cur == 0:
-                return  # 0은 ± 눌러도 변화 없음(아이폰 계산기 동작과 유사)
-
-            new_val = -cur
-            # 디스플레이에서 마지막 항만 교체 (표현 비교 X, 위치 교체 O)
-            last_idx = _last_op_index(current_text)
-            prefix = current_text[: last_idx + 1] if last_idx >= 0 else ''
-            new_display = prefix + _display_number(new_val)
-            self._update_display(new_display)
-
-            # 내부 버퍼는 괄호 없이 정규화된 문자열로
-            self.waiting_operand = list(_canon_number(new_val))
-            return
-
-        # 2) 숫자 입력이 끝난 상태: 디스플레이의 마지막 항을 토글
-        display_text = current_text
-        last_idx = _last_op_index(display_text)
-        prefix = display_text[: last_idx + 1] if last_idx >= 0 else ''
-        last_token = display_text[last_idx + 1 :].strip()
-
-        # 괄호가 있을 수 있으므로 제거 후 파싱 시도
-        try:
-            val = float(last_token.strip('()'))
-        except ValueError:
-            # 전체가 숫자 하나일 수 있으니 한 번 더 시도
-            try:
-                val = float(display_text.strip('()'))
-                prefix = ''  # 전체가 숫자였던 경우
-            except ValueError:
-                return
-
-        if val == 0:
-            return
-
-        new_val = -val
-        new_display = prefix + _display_number(new_val)
-        self._update_display(new_display)
-
-        # operands 동기화: 마지막 항을 실제 값으로 교체
-        if self.operands:
-            self.operands[-1] = new_val
-        else:
-            # 아직 operands가 비어있다면 현재 표시 값을 반영
-            self.operands.append(new_val)
+            self.display.setText(new_text)
 
     def reset(self, update_display: bool = True):
         self.operators.clear()
@@ -351,14 +283,6 @@ class Calculator:
         self.current_expression: str = ''
         self.stacked_expression: list = []
 
-    def _percent(self):
-        self.waiting_operator = '%'
-        # 1. 모듈러 연산
-
-        # 2. 퍼센티지 연산
-
-        ...
-
     def _calculate(self, operators: list, operands: list):
         try:
             if not operands:
@@ -366,7 +290,7 @@ class Calculator:
             i = 0
             while i < len(operators):
                 op = operators[i]
-                if op in ('×', '÷', '%'):
+                if op in ('×', '÷'):
                     a, b = operands[i], operands[i + 1]
 
                     match op:
@@ -492,7 +416,10 @@ class Calculator:
 
     @staticmethod
     def _format_number(number: float) -> str:
-        return str(number).rstrip('0').rstrip('.')
+        if number == int(number):
+            return str(int(number))
+        s = f'{number:.6f}'
+        return s.rstrip('0').rstrip('.')
 
 
 if __name__ == '__main__':
