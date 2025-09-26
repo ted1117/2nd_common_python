@@ -82,12 +82,9 @@ class CalculatorUI(QWidget):
             case 'AC':
                 self.reset()
             case '%':
-                # ▼ 기존: self.calculator.waiting_operator = '%'
-                # 입력 중인 항에 %를 붙여 버퍼에 보관
                 if self.waiting_operand:
                     self.waiting_operand.append('%')
                     self.display.setText(''.join(self.waiting_operand))
-                # 숫자 없이 %만 찍는 건 무시
             case '=':
                 self._equal()
             case '.':
@@ -206,24 +203,26 @@ class CalculatorUI(QWidget):
             except ValueError:
                 return
 
-            # 초항: n% -> n/100 으로 해석하여 숫자 항으로 치환
-            if not self.operators:
-                frac = n / 100.0
-                if (
-                    self.operands
-                    and isinstance(self.operands[-1], str)
-                    and self.operands[-1] == token
-                ):
-                    self.operands[-1] = frac
-                else:
-                    self.operands.append(frac)
-                self.waiting_operand.clear()
-                self.display.setText('')
-                return
-
             last_op = self.operators[-1]
-            if last_op not in ('+', '−'):
-                # +/− 이 아니면 비율 해석 대신 그냥 n/100 으로 숫자 치환
+
+            if self.operators and self.operators[-1] in ('+', '−'):
+                # base = 마지막 연산자 '직전'까지의 결과
+                base = self.calculator._calculate(
+                    self.operators[:-1], self.operands[:-1]
+                )
+                if base is None:
+                    return
+
+                delta = base * (n / 100.0)
+                tmp = base + delta if last_op == '+' else base - delta
+
+                # 식 전체를 tmp 한 항으로 축약
+                self.operands = [tmp]
+                self.operators.clear()
+                self.waiting_operand.clear()
+                self.display.setText('')  # 다음 항 대기
+                return
+            else:
                 frac = n / 100.0
                 if (
                     self.operands
@@ -236,23 +235,6 @@ class CalculatorUI(QWidget):
                 self.waiting_operand.clear()
                 self.display.setText('')
                 return
-
-            # base = 마지막 연산자 '직전'까지의 결과
-            base = self.calculator._calculate(
-                self.operators[:-1][:], self.operands[:-1][:]
-            )
-            if base is None:
-                return
-
-            delta = base * (n / 100.0)
-            tmp = base + delta if last_op == '+' else base - delta
-
-            # 식 전체를 tmp 한 항으로 축약
-            self.operands = [tmp]
-            self.operators.clear()
-            self.waiting_operand.clear()
-            self.display.setText('')  # 다음 항 대기
-            return
 
     def _negative_positive(self):
         current_text = self.display.text()
