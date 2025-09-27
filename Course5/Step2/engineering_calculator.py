@@ -1,13 +1,24 @@
+import math
 import sys
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QGridLayout, QLineEdit, QPushButton, QWidget
+from PyQt5.QtWidgets import (
+    QApplication,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QWidget,
+)
 
 
-class Calculator(QWidget):
+class CalculatorUI(QWidget):
     def __init__(self):
         super().__init__()
         self._init_ui()
+
+        self.calculator = Calculator()
 
         self.waiting_operand: list = []
         self.waiting_operator = None
@@ -18,8 +29,6 @@ class Calculator(QWidget):
         self.current_expression: str = ''
         self.stacked_expression: list = []
 
-        self.reset()
-
     def _init_ui(self):
         self.setWindowTitle('계산기')
         self.setGeometry(300, 300, 300, 400)
@@ -27,35 +36,186 @@ class Calculator(QWidget):
         grid = QGridLayout()
         self.setLayout(grid)
 
+        # 상단: 왼쪽 모드 라벨 + 오른쪽 디스플레이
+        top_layout = QHBoxLayout()
+        self.mode_label = QLabel('DEG')
+        self.mode_label.setStyleSheet('font-size: 14px; color: #aaa;')
+        self.mode_label.setFixedWidth(40)
+
         self.display = QLineEdit()
         self.display.setReadOnly(True)
         self.display.setAlignment(Qt.AlignRight)  # type: ignore
-        self.display.setStyleSheet('font-size: 30px; border: none;')
-        grid.addWidget(self.display, 0, 0, 1, 4)
+        self.display.setStyleSheet('font-size: 30px; border: none; height: 50px;')
+        self.display.setText('0')
+
+        top_layout.addWidget(self.mode_label)
+        top_layout.addWidget(self.display)
+        grid.addLayout(top_layout, 0, 0, 1, 10)
 
         buttons = [
-            '<-', 'AC', '%', '÷',
-            '7', '8', '9', '×',
-            '4', '5', '6', '−',
-            '1', '2', '3', '+',
-            '±', '0', '.', '=',
+            '(', ')', 'mc', 'm+', 'm-', 'mr', '<-', 'AC', '%', '÷',
+            '2nd', 'x²', 'x³', 'xʸ', 'eˣ', '10ˣ', '7', '8', '9', '×',
+            '1/x', '√x', '∛x', 'ʸ√', 'ln', 'log₁₀', '4', '5', '6', '−',
+            'x!', 'sin', 'cos', 'tan', 'e', 'EE', '1', '2', '3', '+',
+            'Rand', 'sinh', 'cosh', 'tanh', 'π', 'Deg', '±', '0', '.', '=',
         ]  # fmt: skip
 
-        positions = [(i, j) for i in range(1, 6) for j in range(4)]
+        positions = [(i, j) for i in range(1, 6) for j in range(10)]
 
         for position, button in zip(positions, buttons):
             if button == '':
                 continue
 
             btn = QPushButton(button)
-            btn.setStyleSheet('font-size: 20px; height: 50px;')
-            btn.clicked.connect(self._button_clicked)
+            row, col = position
 
+            # 색상 스킴
+            if col <= 5:
+                color = '#1c1d1f'
+            elif row == 1 and col in (6, 7, 8):
+                color = '#666666'
+            elif col == 9:
+                color = '#cc8400'
+            else:
+                color = '#1e2024'
+
+            btn.setStyleSheet(
+                f'font-size: 20px; color: #fff; height: 50px; background-color: {color};'
+            )
+            btn.clicked.connect(self._button_clicked)
             grid.addWidget(btn, position[0], position[1])
 
     def _update_display(self, text: str):
         self.display.setText(text)
 
+    # ---------- 공통 유틸 ----------
+    def _parse_buffer(self) -> float | None:
+        if not self.waiting_operand:
+            return None
+        token = ''.join(self.waiting_operand)
+        try:
+            return float(token)
+        except ValueError:
+            return None
+
+    def _apply_unary_prefix(self, label: str, func, *, trig_mode: bool = False):
+        def render(label: str, x_str: str) -> str:
+            if float(x_str) < 0:
+                x_str = f'({x_str})'
+            match label:
+                case '1/x':
+                    return f'{x_str}⁻¹'
+                case '√x':
+                    return f'√({x_str})'
+                case '∛x':
+                    return f'∛({x_str})'
+                case 'ln':
+                    return f'ln({x_str})'
+                case 'log₁₀':
+                    return f'log₁₀({x_str})'
+                case 'sin' | 'cos' | 'tan' | 'sinh' | 'cosh' | 'tanh':
+                    return f'{label}({x_str})'
+                case _:
+                    return f'{label}({x_str})'
+
+    def _apply_unary(self, label: str, func, *, trig_mode: bool = False):
+        def render(label: str, x_str: str) -> str:
+            if float(x_str) < 0:
+                x_str = f'({x_str})'
+            match label:
+                case 'x²':
+                    return f'{x_str}²'
+                case 'x³':
+                    return f'{x_str}³'
+                case '1/x':
+                    return f'{x_str}⁻¹'
+                case '√x':
+                    return f'√({x_str})'
+                case '∛x':
+                    return f'∛({x_str})'
+                case 'eˣ':
+                    return f'e^{x_str}'
+                case '10ˣ':
+                    return f'10^{x_str}'
+                case 'ln':
+                    return f'ln({x_str})'
+                case 'log₁₀':
+                    return f'log₁₀({x_str})'
+                case 'x!':
+                    return f'{x_str}!'
+                case 'sin' | 'cos' | 'tan' | 'sinh' | 'cosh' | 'tanh':
+                    return f'{label}({x_str})'
+                case _:
+                    return f'{label}({x_str})'
+
+        try:
+            taken_from_operands = False
+            if self.waiting_operand:
+                x = self._parse_buffer()
+                if x is None:
+                    return
+            elif self.operands:
+                x = float(self.operands.pop())
+                taken_from_operands = True
+            else:
+                return
+
+            display_x = Calculator._format_number(x)
+            self.display.setText(f'{render(label, display_x)}')
+
+            y = func(x, self.calculator.angle_mode) if trig_mode else func(x)
+            s = Calculator._format_number(y)
+
+            self.waiting_operand = list(s)
+            if taken_from_operands:
+                self.operands.append(y)
+            else:
+                self.waiting_operand = list(s)
+        except Exception:
+            self.display.setText('정의되지 않음')
+            self.reset(update_display=False)
+
+    def _insert_constant(self, value: float, symbol: str = None):
+        """π, e 표시용"""
+        s = Calculator._format_number(value)
+
+        # 이미 숫자를 입력한 상태라면 곱셈으로 연결
+        if self.waiting_operand:
+            operand = float(''.join(self.waiting_operand))
+            self.operands.append(operand)
+            self.waiting_operand.clear()
+
+            self.operators.append('×')
+
+        self.waiting_operand = list(s)
+
+        current_text = self.display.text()
+
+        text = symbol or s
+
+        if current_text == '0':
+            self.display.setText(text)
+        else:
+            self.display.setText(current_text + text)
+
+        # if symbol:
+        #     if current_text == '0':
+        #         self.display.setText(symbol)
+        #     else:
+        #         self.display.setText(current_text + symbol)
+        # else:
+        #     self.display.setText(s)
+
+    def _handle_EE(self):
+        if not self.waiting_operand:
+            return
+        token = ''.join(self.waiting_operand)
+        if token.endswith('%') or 'e' in token or 'E' in token:
+            return
+        self.waiting_operand.append('e')
+        self.display.setText(''.join(self.waiting_operand))
+
+    # ---------- 버튼 처리 ----------
     def _button_clicked(self):
         button = self.sender()
         button_text = button.text()  # type: ignore
@@ -63,19 +223,118 @@ class Calculator(QWidget):
         match button_text:
             case num if num.isdigit():
                 self._handle_number_input(num)
-            case 'AC':
-                self.reset()
-            case '%':
-                self.waiting_operator = '%'
-            case '=':
-                self._handle_equal_input()
             case '.':
                 self._handle_float_input()
             case '±':
                 self._negative_positive()
+            case '<-':
+                if self.waiting_operand:
+                    self.waiting_operand.pop()
+                    self.display.setText(''.join(self.waiting_operand) or '0')
+            case 'AC':
+                self.reset()
+
+            case '%':
+                if self.waiting_operand:
+                    if self.waiting_operand[-1] == '%':
+                        self.waiting_operand.pop()
+                    else:
+                        self.waiting_operand.append('%')
+                    self.display.setText(''.join(self.waiting_operand))
+
+            case '=':
+                self._equal()
             case '+' | '−' | '×' | '÷':
                 self._handle_operator_input(button_text)
 
+            # 단항
+            case 'x²':
+                self._apply_unary('x²', Calculator._square)
+            case 'x³':
+                self._apply_unary('x³', Calculator._cube)
+            case '1/x':
+                self._apply_unary('1/x', Calculator._reciprocal)
+            case '√x':
+                self._apply_unary('√', Calculator._sqrt)
+            case '∛x':
+                self._apply_unary('∛', Calculator._cuberoot)
+            case 'eˣ':
+                self._apply_unary('eˣ', Calculator._exp)
+            case '10ˣ':
+                self._apply_unary('10ˣ', Calculator._pow10)
+            case 'ln':
+                self._apply_unary('ln', Calculator._ln)
+            case 'log₁₀':
+                self._apply_unary('log₁₀', Calculator._log10)
+            case 'x!':
+                self._apply_unary('x!', Calculator._factorial)
+
+            # 삼각(각도 모드 반영)
+            case 'sin':
+                self._apply_unary('sin', Calculator._sin, trig_mode=True)
+            case 'cos':
+                self._apply_unary('cos', Calculator._cos, trig_mode=True)
+            case 'tan':
+                self._apply_unary('tan', Calculator._tan, trig_mode=True)
+
+            # 하이퍼볼릭
+            case 'sinh':
+                self._apply_unary('sinh', Calculator._sinh)
+            case 'cosh':
+                self._apply_unary('cosh', Calculator._cosh)
+            case 'tanh':
+                self._apply_unary('tanh', Calculator._tanh)
+
+            # 상수/EE/각도 모드
+            case 'π':
+                self._insert_constant(math.pi, 'π')
+            case 'e':
+                self._insert_constant(math.e, 'e')
+            case 'Rand':
+                import random
+
+                self._insert_constant(random.random())
+            case 'EE':
+                self._handle_EE()
+            case 'Deg':
+                self._toggle_angle_mode()
+
+            # 이항 특수: xʸ, ʸ√ (2단계 입력)
+            case 'xʸ':
+                if self.waiting_operand:
+                    tok = ''.join(self.waiting_operand)
+                    try:
+                        x = float(tok[:-1]) / 100.0 if tok.endswith('%') else float(tok)
+                    except ValueError:
+                        return
+                    self.operands.append(x)
+                    self.waiting_operand.clear()
+                    self.operators.append('xʸ')
+                    self.display.setText('')
+                elif self.operands:
+                    self.operators.append('xʸ')
+                    self.display.setText('')
+            case 'ʸ√':
+                # x 확정 → 연산자 'ʸ√' 표기 → y 입력 대기
+                if self.waiting_operand:
+                    tok = ''.join(self.waiting_operand)
+                    try:
+                        x = float(tok[:-1]) / 100.0 if tok.endswith('%') else float(tok)
+                    except ValueError:
+                        return
+                    self.operands.append(x)
+                    self.waiting_operand.clear()
+                    self.operators.append('ʸ√')
+                    self.display.setText('')
+                elif self.operands:
+                    self.operators.append('ʸ√')
+                    self.display.setText('')
+
+            # 미구현(보류)
+            case '2nd' | '(' | ')' | 'mc' | 'm+' | 'm-' | 'mr':
+                pass
+
+    # ---------- 기존 숫자/연산 흐름 ----------
     def _handle_number_input(self, number: str):
         self._set_text(float(number))
         self.waiting_operand.append(number)
@@ -84,8 +343,6 @@ class Calculator(QWidget):
             self.waiting_operator = None
 
     def _handle_float_input(self):
-        # 앞에 연산자 혹은 아무런 숫자 입력이 없다면 '0.' 추가
-        # 숫자가 있으면 그냥 . 추가
         current_text = self.display.text()
         if '.' in current_text:
             return
@@ -97,103 +354,112 @@ class Calculator(QWidget):
 
     def _handle_operator_input(self, operator: str):
         if self.waiting_operand:
-            operand = float(''.join(self.waiting_operand))
-            self.operands.append(operand)
+            if '%' in self.waiting_operand:
+                operand = ''.join(self.waiting_operand)
+                self.operands.append(operand)
+                self._percent()
+            else:
+                operand = float(''.join(self.waiting_operand))
+                self.operands.append(operand)
         self.waiting_operand.clear()
-        self.waiting_operator = operator
-        self.display.setText(self.display.text() + operator)
+        self.operators.append(operator)
+        self.display.setText('')
 
-    def _handle_equal_input(self):
+    def _equal(self):
         if self.waiting_operand:
-            self.operands.append(float(''.join(self.waiting_operand)))
+            token = ''.join(self.waiting_operand)
+            if '%' in token:
+                self.operands.append(token)
+                self._percent()
+            else:
+                self.operands.append(float(token))
             self.waiting_operand.clear()
-        result = self._calculate()
+
+        if len(self.operators) == len(self.operands):
+            self.operators.pop()
+
+        result = self.calculator._calculate(self.operators[:], self.operands[:])
 
         if result is not None:
             self.display.setText(Calculator._format_number(result))
+            self.operands = [result]
+            self.operators.clear()
+        else:
+            self.display.setText('정의되지 않음')
+            self.reset(update_display=False)
+
+    def _percent(self):
+        token = ''.join(self.waiting_operand) if self.waiting_operand else None
+        if token is None:
+            if (
+                self.operands
+                and isinstance(self.operands[-1], str)
+                and '%' in self.operands[-1]
+            ):
+                token = self.operands[-1]
+            else:
+                return
+
+        # 'a%b' → 모듈러
+        if '%' in token and not token.endswith('%'):
+            try:
+                a_str, b_str = token.split('%', 1)
+                a = float(a_str)
+                b = float(b_str)
+                modv = Calculator._modulo(a, b)
+                if modv is None:
+                    return
+                self.operands[-1] = modv
+                self.waiting_operand.clear()
+                self.display.setText('')
+                return
+            except Exception:
+                return
+
+        # 'n%' → 초항/+/− 비율 처리
+        if token.endswith('%'):
+            try:
+                n = float(token[:-1])
+            except ValueError:
+                return
+
+            last_op = self.operators[-1] if self.operators else None
+
+            if self.operators and last_op in ('+', '−'):
+                base = self.calculator._calculate(
+                    self.operators[:-1], self.operands[:-1]
+                )
+                if base is None:
+                    return
+                delta = base * (n / 100.0)
+                tmp = base + delta if last_op == '+' else base - delta
+                self.operands = [tmp]
+                self.operators.clear()
+                self.waiting_operand.clear()
+                self.display.setText('')
+                return
+            else:
+                self.operands[-1] = n / 100.0
+                self.waiting_operand.clear()
+                self.display.setText('')
+                return
 
     def _negative_positive(self):
         current_text = self.display.text()
-
-        # 오류 상태면 무시
-        if current_text in ['정의되지 않음', 'Error!']:
-            return
-
-        # 마지막 연산자 인덱스 탐색 유틸 (로컬 함수)
-        def _last_op_index(s: str) -> int:
-            # 여러 연산자 중 가장 뒤에 있는 위치
-            idxs = [s.rfind(op) for op in ['+', '−', '×', '÷']]
-            return max(idxs)
-
-        # 화면에 보여줄 표기 생성 (음수면 괄호)
-        def _display_number(val: float) -> str:
-            s = self._format_number(val)
-            return f'({s})' if val < 0 else s
-
-        # 내부 버퍼용 표기(괄호 없음, 불필요한 0 제거, 부호는 -만)
-        def _canon_number(val: float) -> str:
-            return self._format_number(val)  # 음수면 '-'가 포함된 문자열
-
-        # 1) 현재 숫자 입력 중: waiting_operand 를 기반으로 토글
         if self.waiting_operand:
-            number_str = ''.join(self.waiting_operand)
-            try:
-                cur = float(number_str)
-            except ValueError:
-                return
+            if self.waiting_operand[0] == '-':
+                self.waiting_operand.pop(0)
+                new_text = current_text[1:]
+            else:
+                self.waiting_operand.insert(0, '-')
+                new_text = '-' + current_text
+            self.display.setText(new_text)
 
-            if cur == 0:
-                return  # 0은 ± 눌러도 변화 없음(아이폰 계산기 동작과 유사)
-
-            new_val = -cur
-            # 디스플레이에서 마지막 항만 교체 (표현 비교 X, 위치 교체 O)
-            last_idx = _last_op_index(current_text)
-            prefix = current_text[: last_idx + 1] if last_idx >= 0 else ''
-            new_display = prefix + _display_number(new_val)
-            self._update_display(new_display)
-
-            # 내부 버퍼는 괄호 없이 정규화된 문자열로
-            self.waiting_operand = list(_canon_number(new_val))
-            return
-
-        # 2) 숫자 입력이 끝난 상태: 디스플레이의 마지막 항을 토글
-        display_text = current_text
-        last_idx = _last_op_index(display_text)
-        prefix = display_text[: last_idx + 1] if last_idx >= 0 else ''
-        last_token = display_text[last_idx + 1 :].strip()
-
-        # 괄호가 있을 수 있으므로 제거 후 파싱 시도
-        try:
-            val = float(last_token.strip('()'))
-        except ValueError:
-            # 전체가 숫자 하나일 수 있으니 한 번 더 시도
-            try:
-                val = float(display_text.strip('()'))
-                prefix = ''  # 전체가 숫자였던 경우
-            except ValueError:
-                return
-
-        if val == 0:
-            return
-
-        new_val = -val
-        new_display = prefix + _display_number(new_val)
-        self._update_display(new_display)
-
-        # operands 동기화: 마지막 항을 실제 값으로 교체
-        if self.operands:
-            self.operands[-1] = new_val
-        else:
-            # 아직 operands가 비어있다면 현재 표시 값을 반영
-            self.operands.append(new_val)
-
-    def _percent(self):
-        self.waiting_operator = '%'
-        # 1. 모듈러 연산
-
-        # 2. 퍼센티지 연산
-
-        ...
+    def _toggle_angle_mode(self):
+        self.calculator.angle_mode = (
+            'DEG' if self.calculator.angle_mode == 'RAD' else 'RAD'
+        )
+        self.mode_label.setText(self.calculator.angle_mode)
 
     def reset(self, update_display: bool = True):
         self.operators.clear()
@@ -203,62 +469,8 @@ class Calculator(QWidget):
         if update_display:
             self.display.setText('0')
 
-    def _calculate(self) -> float | None:
-        try:
-            if not self.operands:
-                return
-            i = 0
-            while i < len(self.operators):
-                op = self.operators[i]
-                if op in ('×', '÷', '%'):
-                    a, b = self.operands[i], self.operands[i + 1]
-
-                    match op:
-                        case '×':
-                            result = Calculator._multiply(a, b)
-                        case '÷':
-                            result = Calculator._divide(a, b)
-                        case '%':
-                            result = Calculator._modulo(a, b)
-
-                    if result is None:
-                        raise ZeroDivisionError
-
-                    self.operands[i] = result
-
-                    self.operators.pop(i)
-                    self.operands.pop(i + 1)
-
-                else:
-                    i += 1
-
-            while self.operators:
-                op = self.operators.pop(0)
-                a = self.operands.pop(0)
-                if not self.operands:
-                    result = a
-                else:
-                    b = self.operands.pop(0)
-                    result = (
-                        Calculator._add(a, b)
-                        if op == '+'
-                        else Calculator._subtract(a, b)
-                    )
-                self.operands.insert(0, result)
-
-            final_result = self.operands[0]
-            return final_result
-
-        except ZeroDivisionError:
-            self.display.setText('정의되지 않음')
-            self.reset(update_display=False)
-        except Exception as e:
-            print(e)
-            self.display.setText('Error!')
-            self.reset(update_display=False)
-
     def _set_text(self, number: float):
-        print(type(number))
+        """디스플레이에 숫자 표시"""
         if number == int(number):
             number = int(number)
         text = self.display.text()
@@ -267,6 +479,74 @@ class Calculator(QWidget):
         else:
             self.display.setText(self.display.text() + str(number))
 
+
+class Calculator:
+    def __init__(self):
+        super().__init__()
+
+        self.waiting_operand: list = []
+        self.waiting_operator = None
+
+        self.operands: list = []
+        self.operators: list = []
+
+        self.current_expression: str = ''
+        self.stacked_expression: list = []
+
+        self.angle_mode = 'DEG'
+
+    def _calculate(self, operators: list, operands: list):
+        try:
+            if not operands:
+                return
+            i = 0
+            while i < len(operators):
+                op = operators[i]
+                if op in ('×', '÷', 'xʸ', 'ʸ√'):
+                    a, b = operands[i], operands[i + 1]
+                    match op:
+                        case '×':
+                            result = Calculator._multiply(a, b)
+                        case '÷':
+                            result = Calculator._divide(a, b)
+                        case 'xʸ':
+                            result = Calculator._power(a, b)  # a ** b
+                        case 'ʸ√':
+                            result = Calculator._yth_root(a, b)  # a ** (1/b)
+
+                    if result is None:
+                        raise ZeroDivisionError
+
+                    operands[i] = result
+                    operators.pop(i)
+                    operands.pop(i + 1)
+                else:
+                    i += 1
+
+            # 남은 +, − 처리
+            while operators:
+                op = operators.pop(0)
+                a = operands.pop(0)
+                if not operands:
+                    result = a
+                else:
+                    b = operands.pop(0)
+                    result = (
+                        Calculator._add(a, b)
+                        if op == '+'
+                        else Calculator._subtract(a, b)
+                    )
+                operands.insert(0, result)
+
+            return operands[0]
+
+        except ZeroDivisionError:
+            return None
+        except Exception as e:
+            print(e)
+            return None
+
+    # ---------- 기본 연산 ----------
     @staticmethod
     def _add(a: float, b: float) -> float:
         return a + b
@@ -291,13 +571,110 @@ class Calculator(QWidget):
             raise ZeroDivisionError
         return a % b
 
+    # ---------- 거듭제곱/루트 ----------
+    @staticmethod
+    def _power(x: float, y: float = 2) -> float:
+        return x**y
+
+    @staticmethod
+    def _square(x: float):
+        return Calculator._power(x, 2)
+
+    @staticmethod
+    def _cube(x: float):
+        return Calculator._power(x, 3)
+
+    @staticmethod
+    def _exp(x: float):
+        return Calculator._power(math.e, x)
+
+    @staticmethod
+    def _pow10(x: float):
+        return Calculator._power(10, x)
+
+    @staticmethod
+    def _reciprocal(x: float):
+        if x == 0:
+            raise ZeroDivisionError
+        return Calculator._power(x, -1)
+
+    @staticmethod
+    def _sqrt(x: float):
+        return math.sqrt(x)
+
+    @staticmethod
+    def _cuberoot(x: float):
+        return math.copysign(abs(x) ** (1 / 3), x)
+
+    @staticmethod
+    def _yth_root(x: float, y: float):
+        if y == 0:
+            raise ZeroDivisionError
+        return math.copysign(abs(x) ** (1 / y), x)
+        return Calculator._power(x, 1 / y)
+
+    # ---------- 로그 ----------
+    @staticmethod
+    def _ln(x: float):
+        return math.log(x)
+
+    @staticmethod
+    def _log10(x: float):
+        return math.log10(x)
+
+    @staticmethod
+    def _log(x: float, y: float):
+        return math.log(x, y)
+
+    # ---------- 팩토리얼 ----------
+    @staticmethod
+    def _factorial(x: float):
+        if x <= 0:
+            raise ValueError
+        return math.factorial(int(x))
+
+    # ---------- 삼각/하이퍼볼릭 ----------
+    @staticmethod
+    def _sin(x: float, mode: str = 'RAD') -> float:
+        if mode == 'DEG':
+            x = math.radians(x)
+        return math.sin(x)
+
+    @staticmethod
+    def _cos(x: float, mode: str = 'RAD') -> float:
+        if mode == 'DEG':
+            x = math.radians(x)
+        return math.cos(x)
+
+    @staticmethod
+    def _tan(x: float, mode: str = 'RAD') -> float:
+        if mode == 'DEG':
+            x = math.radians(x)
+        return math.tan(x)
+
+    @staticmethod
+    def _sinh(x: float) -> float:
+        return math.sinh(x)
+
+    @staticmethod
+    def _cosh(x: float) -> float:
+        return math.cosh(x)
+
+    @staticmethod
+    def _tanh(x: float) -> float:
+        return math.tanh(x)
+
+    # ---------- 출력 포맷 ----------
     @staticmethod
     def _format_number(number: float) -> str:
-        return str(number).rstrip('0').rstrip('.')
+        if number == int(number):
+            return str(int(number))
+        s = f'{number:.6f}'
+        return s.rstrip('0').rstrip('.')
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    calc = Calculator()
+    calc = CalculatorUI()
     calc.show()
     sys.exit(app.exec_())
