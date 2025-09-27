@@ -419,7 +419,9 @@ class Calculator:
 
     @staticmethod
     def _factorial(x: float):
-        return math.factorial(x)
+        if x <= 0:
+            raise ValueError
+        return math.factorial(int(x))
 
     @staticmethod
     def _sin(x: float, mode: str = 'RAD') -> float:
