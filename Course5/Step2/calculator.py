@@ -142,7 +142,6 @@ class CalculatorUI(QWidget):
             self.reset(update_display=False)
 
     def _percent(self):
-        # 우선 현재 입력 버퍼 기준으로 토큰 확보
         token = ''.join(self.waiting_operand) if self.waiting_operand else None
 
         # 직전에 _handle_operator_input 에서 이미 operands에 문자열로 넣은 경우 처리
@@ -156,7 +155,7 @@ class CalculatorUI(QWidget):
             else:
                 return  # 처리할 퍼센트 토큰 없음
 
-        # ---------- 규칙 2: 'a%b' 모듈러 ----------
+        # ---------- 'a%b' 모듈러 ----------
         if '%' in token and not token.endswith('%'):
             try:
                 a_str, b_str = token.split('%', 1)
@@ -165,24 +164,22 @@ class CalculatorUI(QWidget):
                 modv = Calculator._modulo(a, b)
                 if modv is None:
                     return
-                # 마지막 항을 모듈러 결과로 교체
-                if (
-                    self.operands
-                    and isinstance(self.operands[-1], str)
-                    and self.operands[-1] == token
-                ):
-                    self.operands[-1] = modv
-                else:
-                    # 아직 operands에 안 들어갔다면 push
-                    self.operands.append(modv)
-                # 입력 버퍼/표시 정리
+                # if (
+                #     self.operands
+                #     and isinstance(self.operands[-1], str)
+                #     and self.operands[-1] == token
+                # ):
+                #     self.operands[-1] = modv
+                # else:
+                #     self.operands.append(modv)
+                self.operands[-1] = modv
                 self.waiting_operand.clear()
                 self.display.setText('')
                 return
             except Exception:
                 return
 
-        # ---------- 규칙 1: 'n%' 비율 ----------
+        # ---------- 'n%' 비율 ----------
         if token.endswith('%'):
             # 퍼센트 숫자 파싱
             try:
@@ -193,21 +190,21 @@ class CalculatorUI(QWidget):
             # 초항: n% -> n/100 으로 해석하여 숫자 항으로 치환
             if not self.operators:
                 frac = n / 100.0
-                if (
-                    self.operands
-                    and isinstance(self.operands[-1], str)
-                    and self.operands[-1] == token
-                ):
-                    self.operands[-1] = frac
-                else:
-                    self.operands.append(frac)
+                # if (
+                #     self.operands
+                #     and isinstance(self.operands[-1], str)
+                #     and self.operands[-1] == token
+                # ):
+                #     self.operands[-1] = frac
+                # else:
+                #     self.operands.append(frac)
+                self.operands[-1] = frac
                 self.waiting_operand.clear()
                 self.display.setText('')
                 return
 
             last_op = self.operators[-1]
             if last_op not in ('+', '−'):
-                # +/− 이 아니면 비율 해석 대신 그냥 n/100 으로 숫자 치환
                 frac = n / 100.0
                 if (
                     self.operands
@@ -221,7 +218,7 @@ class CalculatorUI(QWidget):
                 self.display.setText('')
                 return
 
-            # base = 마지막 연산자 '직전'까지의 결과
+            # 직전항까지 연산
             base = self.calculator._calculate(
                 self.operators[:-1][:], self.operands[:-1][:]
             )
@@ -335,60 +332,6 @@ class Calculator:
             return None
             # self.display.setText('Error!')
             # self.reset(update_display=False)
-
-    def _calculate_old(self) -> float | None:
-        try:
-            if not self.operands:
-                return
-            i = 0
-            while i < len(self.operators):
-                op = self.operators[i]
-                if op in ('×', '÷', '%'):
-                    a, b = self.operands[i], self.operands[i + 1]
-
-                    match op:
-                        case '×':
-                            result = Calculator._multiply(a, b)
-                        case '÷':
-                            result = Calculator._divide(a, b)
-                        case '%':
-                            result = Calculator._modulo(a, b)
-
-                    if result is None:
-                        raise ZeroDivisionError
-
-                    self.operands[i] = result
-
-                    self.operators.pop(i)
-                    self.operands.pop(i + 1)
-
-                else:
-                    i += 1
-
-            while self.operators:
-                op = self.operators.pop(0)
-                a = self.operands.pop(0)
-                if not self.operands:
-                    result = a
-                else:
-                    b = self.operands.pop(0)
-                    result = (
-                        Calculator._add(a, b)
-                        if op == '+'
-                        else Calculator._subtract(a, b)
-                    )
-                self.operands.insert(0, result)
-
-            final_result = self.operands[0]
-            return final_result
-
-        except ZeroDivisionError:
-            self.display.setText('정의되지 않음')
-            self.reset(update_display=False)
-        except Exception as e:
-            print(e)
-            self.display.setText('Error!')
-            self.reset(update_display=False)
 
     @staticmethod
     def _add(a: float, b: float) -> float:
