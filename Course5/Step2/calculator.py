@@ -164,14 +164,6 @@ class CalculatorUI(QWidget):
                 modv = Calculator._modulo(a, b)
                 if modv is None:
                     return
-                # if (
-                #     self.operands
-                #     and isinstance(self.operands[-1], str)
-                #     and self.operands[-1] == token
-                # ):
-                #     self.operands[-1] = modv
-                # else:
-                #     self.operands.append(modv)
                 self.operands[-1] = modv
                 self.waiting_operand.clear()
                 self.display.setText('')
@@ -187,33 +179,10 @@ class CalculatorUI(QWidget):
             except ValueError:
                 return
 
-            # 초항: n% -> n/100 으로 해석하여 숫자 항으로 치환
-            if not self.operators:
-                frac = n / 100.0
-                # if (
-                #     self.operands
-                #     and isinstance(self.operands[-1], str)
-                #     and self.operands[-1] == token
-                # ):
-                #     self.operands[-1] = frac
-                # else:
-                #     self.operands.append(frac)
-                self.operands[-1] = frac
-                self.waiting_operand.clear()
-                self.display.setText('')
-                return
-
+            # 초항이거나 직전 연산자가 + 혹은 -가 아니라면 비율로 연산
             last_op = self.operators[-1]
-            if last_op not in ('+', '−'):
-                frac = n / 100.0
-                if (
-                    self.operands
-                    and isinstance(self.operands[-1], str)
-                    and self.operands[-1] == token
-                ):
-                    self.operands[-1] = frac
-                else:
-                    self.operands.append(frac)
+            if not self.operators or last_op not in ('+', '−'):
+                self.operands[-1] = n / 100.0
                 self.waiting_operand.clear()
                 self.display.setText('')
                 return
